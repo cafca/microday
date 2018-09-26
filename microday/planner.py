@@ -5,12 +5,15 @@ import select
 import subprocess
 from datetime import datetime, timedelta
 from time import sleep
+from termcolor import cprint, colored
+
 
 def user_choice(text):
     choice = None
     while choice not in ['y', 'n', '']:
         choice = input('{} [Y/n] '.format(text))
     return choice in ['y', '']
+
 
 def strfdelta(tdelta, fmt):
     d = {"d": tdelta.days}
@@ -36,21 +39,22 @@ class Microday(object):
         cmd = "say -v Anna {}: {}"
 
         if left.seconds == 60:
-            subprocess.run(cmd.format('In einer Minute beginnt', task), 
-                shell=True)
+            subprocess.run(cmd.format('In einer Minute beginnt', task),
+                           shell=True)
 
         if left.seconds == 0:
-            subprocess.run(cmd.format('Jetzt beginnt', task), 
-                shell=True)
+            subprocess.run(cmd.format('Jetzt beginnt', task),
+                           shell=True)
 
     def from_disk(self, datafn):
         with open(datafn) as f:
+
             planning = False
             for line in f.readlines():
-                if line == '\n' or line == '# Todos\n':
+                if line == '\n' or line.strip() in [colored('# Todos', 'blue'), '# Todos']:
                     continue
 
-                if line.startswith('# Zeitplan'):
+                if line.startswith(colored('# Zeitplan', 'blue')) or line.startswith('# Zeitplan'):
                     planning = True
 
                 if planning:
@@ -62,13 +66,12 @@ class Microday(object):
         offset = start.minute % 5
         if offset not in [0, 5]:
             start = start + timedelta(minutes=(5 - offset))
-            
+
         return {
             'start': start,
             'duration': duration,
             'task': task
         }
-
 
     def plan_todos(self):
         new_todos = []
@@ -82,7 +85,8 @@ class Microday(object):
                 if len(self.tasks) == 0:
                     start = datetime.now()
                 else:
-                    start = self.tasks[-1]['start'] + self.tasks[-1]['duration']
+                    start = self.tasks[-1]['start'] + \
+                        self.tasks[-1]['duration']
                     if start < datetime.now():
                         start = datetime.now()
 
@@ -117,12 +121,12 @@ class Microday(object):
             dur = datetime.now() - self.tasks[current]['start']
             self.tasks[current]['duration'] = dur
             start = current + 1
-        
+
         for i in range(start, len(self.tasks)):
             prev = self.tasks[i - 1]
             self.tasks[i] = self.create_task(
-                prev['start'] + prev['duration'],  # new start time 
-                self.tasks[i]['duration'], 
+                prev['start'] + prev['duration'],  # new start time
+                self.tasks[i]['duration'],
                 self.tasks[i]['task']
             )
         print("\n" + self.serialize() + "\n")
@@ -131,46 +135,47 @@ class Microday(object):
     def run(self):
         if len(self.todos) > 0:
             print(self.serialize())
-            if user_choice('Zeitplanung für offene Todos starten?'):
+            if user_choice(colored('Zeitplanung für offene Todos starten?', 'green')):
                 self.plan_todos()
                 print("\n")
 
         print(self.serialize())
         print("\n")
-        remaining = [i for i, t in enumerate(self.tasks) \
-            if t['start'] + t['duration'] >= datetime.now()]
+        remaining = [i for i, t in enumerate(self.tasks)
+                     if t['start'] + t['duration'] >= datetime.now()]
 
         if len(remaining) == 0:
-            print("Alle Aufgaben liegen in der Vergangenheit")
+            cprint("Alle Aufgaben liegen in der Vergangenheit", 'green')
             return
-        
+
         cur = remaining[0]
         while(True):
             # If user entered something since last loop
             if (select.select([sys.stdin, ], [], [], 0.0)[0]):
                 choice = sys.stdin.readline().strip()
                 if choice == '':
-                    print('Rescheduling...')
+                    cprint('Neuplanung..', 'grey')
                     self.reschedule(cur)
                     if self.tasks[cur]['start'] <= datetime.now():
-                        print('Increasing cur...')
+                        cprint('Nächste Aufgabe..', 'grey')
                         cur += 1
                         if cur >= len(self.tasks):
-                            print("Fertig!")
+                            cprint("Fertig!", 'green')
                             break
                 elif choice == 't':
-                    task = input('Task eingeben: ')
-                    duration = int(input('Wieviele Minuten?: '))
-                    start = self.tasks[cur + 1]['start']
-                    self.tasks.insert(cur + 1, self.create_task(start, timedelta(minutes=duration), task))
+                    task = input(colored('Aufgabe eingeben: ', 'green'))
+                    duration = int(input(colored('Wieviele Minuten?: ', 'green')))
+                    start = self.tasks[cur + 1]['start'] if len(self.tasks) > (cur + 1) else self.tasks[cur]['start'] + self.tasks[cur]['duration']
+                    self.tasks.insert(
+                        cur + 1, self.create_task(start, timedelta(minutes=duration), task))
                     print(self.serialize())
                 elif choice == 's':
                     self.todos.insert(0, self.tasks[cur]['task'])
                     del self.tasks[cur]
                     self.to_disk()
                     print(self.serialize())
-                    if cur == len(self.tasks):  
-                        print("Fertig!")
+                    if cur == len(self.tasks):
+                        cprint("Fertig!", 'green')
                         break
 
                 print(self.instructions)
@@ -179,10 +184,10 @@ class Microday(object):
 
             if self.tasks[cur]['start'] > datetime.now():
                 left = self.tasks[cur]['start'] - datetime.now()
-                sys.stdout.write("\r{} beginnt in {} [enter=starte jetzt]".format(
-                    self.tasks[cur]['task'], 
-                    strfdelta(left, '{m}:{s:02d}'))
-                )
+                sys.stdout.write(colored("\r{} beginnt in {} [enter=starte jetzt]".format(
+                    self.tasks[cur]['task'],
+                    strfdelta(left, '{m}:{s:02d}')
+                ), 'green'))
                 self.announce(cur, left)
             else:
                 if (cur + 1) < len(self.tasks):
@@ -192,16 +197,16 @@ class Microday(object):
                     next_task = "Fertig!"
                     left = None
                 over = strfdelta(
-                    datetime.now() - self.tasks[cur]['start'], 
+                    datetime.now() - self.tasks[cur]['start'],
                     '{m}:{s:02d}'
                 )
 
                 update_tmpl = "\r{} vergangen bei: {}, als nächstes: {}. "
-                sys.stdout.write(update_tmpl.format(
-                    over, 
-                    self.tasks[cur]['task'], 
-                    next_task)
-                )
+                sys.stdout.write(colored(update_tmpl.format(
+                    over,
+                    self.tasks[cur]['task'],
+                    next_task
+                ), 'green'))
                 self.announce(cur + 1, left)
 
             sleep(1)
@@ -209,15 +214,17 @@ class Microday(object):
     def serialize(self):
         out = ""
         if len(self.todos) > 0:
-            out += "# Todos\n\n- "
+            out += colored("# Todos", 'blue')
+            out += "\n\n- "
             out += '\n- '.join(self.todos)
             out += "\n\n"
 
         if len(self.tasks) > 0:
-            out += "# Zeitplan\n\n"
+            out += colored("# Zeitplan", 'blue')
+            out += "\n\n"
             out += "\n".join(["{} - {}h {}".format(
-                task['start'].strftime("%H:%M"), 
-                strfdelta(task['duration'], "{h}:{m:02d}"), 
+                task['start'].strftime("%H:%M"),
+                strfdelta(task['duration'], "{h}:{m:02d}"),
                 task['task']
             ) for task in self.tasks])
             end = self.tasks[-1]['start'] + self.tasks[-1]['duration']
@@ -229,12 +236,12 @@ class Microday(object):
         with open(self.datafn, 'w') as f:
             f.write(self.serialize())
 
-        
+
 if __name__ == '__main__':
     planner = Microday('todo.md')
     try:
         planner.run()
     except KeyboardInterrupt:
         planner.to_disk()
-        print('\nZeitplan gespeichert. Bye!\n')
+        cprint('\nZeitplan gespeichert. Bye!\n', 'green')
         raise SystemExit
