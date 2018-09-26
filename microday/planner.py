@@ -118,7 +118,7 @@ class Microday(object):
             self.tasks[current]['duration'] = dur
             start = current + 1
         
-        for i in range(start, len(self.tasks) - 1):
+        for i in range(start, len(self.tasks)):
             prev = self.tasks[i - 1]
             self.tasks[i] = self.create_task(
                 prev['start'] + prev['duration'],  # new start time 
@@ -209,15 +209,19 @@ class Microday(object):
     def serialize(self):
         out = ""
         if len(self.todos) > 0:
-            out += "# Todos\n\n"
+            out += "# Todos\n\n- "
             out += '\n- '.join(self.todos)
             out += "\n\n"
-        out += "# Zeitplan\n\n"
-        out += "\n".join(["{} - {}h {}".format(
-            task['start'].strftime("%H:%M"), 
-            strfdelta(task['duration'], "{h}:{m:02d}"), 
-            task['task']
-        ) for task in self.tasks])
+
+        if len(self.tasks) > 0:
+            out += "# Zeitplan\n\n"
+            out += "\n".join(["{} - {}h {}".format(
+                task['start'].strftime("%H:%M"), 
+                strfdelta(task['duration'], "{h}:{m:02d}"), 
+                task['task']
+            ) for task in self.tasks])
+            end = self.tasks[-1]['start'] + self.tasks[-1]['duration']
+            out += "\n{} - Feierabend".format(end.strftime("%H:%M"))
 
         return out
 
