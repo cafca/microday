@@ -2,7 +2,7 @@
 
 Meticulously plan your day minute-by-minute
 
-![](screencast.png)
+[![asciicast](https://asciinema.org/a/QGTNJSu7p3BzpSTTPi43HATR9.png)](https://asciinema.org/a/QGTNJSu7p3BzpSTTPi43HATR9)
 
 ## Setup
 
