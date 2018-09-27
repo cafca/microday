@@ -1,5 +1,6 @@
 import argparse
 import re
+import os
 import sys
 import select
 import subprocess
@@ -37,7 +38,12 @@ class Microday(object):
         try:
             self.from_disk(datafn)
         except FileNotFoundError:
-            self.from_input()
+            cprint("{} not found. Trying 'todo.md'..".format(datafn), COLOR_LOG)
+            try:
+                self.from_disk('todo.md')
+            except FileNotFoundError:
+                cprint('{} not found'.format('todo.md'), COLOR_LOG)
+                self.from_input()
 
     def announce(self, index, left):
         if left is None or left.seconds not in [0, 60]:
@@ -162,8 +168,6 @@ class Microday(object):
             text = self.tasks[i]['task']
             self.tasks[i] = self.create_task(start, duration, text)
 
-        self.to_disk()
-
         if self.tasks[self.cur]['start'] <= datetime.now():
             cprint('Nächste Aufgabe..', COLOR_LOG)
             self.cur += 1
@@ -190,7 +194,6 @@ class Microday(object):
     def task_to_todo(self, index):
         self.todos.insert(0, self.tasks[index]['task'])
         del self.tasks[index]
-        self.to_disk()
 
     def print_announcement_line(self):
         # Reset command prompt with
@@ -263,6 +266,8 @@ class Microday(object):
                     self.insert_new_task()
                 elif choice == 's':
                     self.task_to_todo(self.cur)
+                
+                self.to_disk()
 
                 print(self.serialize())
 
@@ -309,6 +314,8 @@ class Microday(object):
     def to_disk(self):
         with open(self.datafn, 'w') as f:
             f.write(self.serialize(colors=False))
+        fullp = os.path.join(os.path.dirname(os.path.realpath(self.datafn)), self.datafn)
+        cprint('{} gespeichert.'.format(fullp), COLOR_LOG)
 
 
 if __name__ == '__main__':
@@ -321,17 +328,22 @@ if __name__ == '__main__':
         help="Filename of your todo doc, default is 'todo_<y-m-d>.md'>"
     )
     args = parser.parse_args()
+
     planner = Microday(args.filename)
+
     try:
         planner.run()
     except KeyboardInterrupt:
         remaining = planner.select_starting_point()
         if len(remaining) > 0:
-            put_back = user_choice('\n\n{} offene Tasks zurück zu den Todos legen?'.format(len(remaining)))
+            put_back = user_choice(
+                '\n\n{} offene Tasks zurück zu den Todos legen?'.format(
+                    len(remaining)))
             if put_back:
                 [planner.task_to_todo(i) for i in remaining[::-1]]
         else:
             print()
+
         planner.to_disk()
-        cprint('Zeitplan gespeichert. Bye!\n', COLOR_ACCENT)
+        cprint('Bye!\n', COLOR_ACCENT)
         raise SystemExit
