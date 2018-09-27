@@ -10,6 +10,7 @@ from termcolor import cprint, colored
 COLOR_LOG = 'grey'
 COLOR_ACCENT = 'green'
 
+
 def user_choice(text):
     choice = None
     while choice not in ['y', 'n', '']:
@@ -60,7 +61,7 @@ class Microday(object):
                     planning = True
 
                 if planning:
-                    self.process_entry(line)
+                    self.process_task(line)
                 else:
                     self.process_todo(line.strip())
 
@@ -97,15 +98,14 @@ class Microday(object):
         self.todos = new_todos
         self.to_disk()
 
-    def process_entry(self, text):
+    def process_task(self, text):
         exp = r"(\d{1,2})[.:]+(\d{2}).+(\d{1,2})[:.](\d{2})[hm]?[\s]?([^\n]+)"
         m = re.match(exp, text)
 
         if m:
             h, m, dur_h, dur_m, task = m.groups()
             self.tasks.append({
-                'start': datetime.now() \
-                    .replace(hour=int(h), minute=int(m)),
+                'start': datetime.now().replace(hour=int(h), minute=int(m)),
                 'duration': timedelta(hours=int(dur_h), minutes=int(dur_m)),
                 'task': task
             })
@@ -123,7 +123,7 @@ class Microday(object):
                 self.tasks[self.cur]['task']
             ), COLOR_LOG)
             return
-        
+
         if self.tasks[self.cur]['start'] > datetime.now():
             cprint('Aktuelle Aufgabe wird vorgezogen..', COLOR_LOG)
             self.tasks[self.cur]['start'] = datetime.now()
@@ -133,7 +133,8 @@ class Microday(object):
             dur = datetime.now() - self.tasks[self.cur]['start']
             self.tasks[self.cur]['duration'] = dur
             start = self.cur + 1
-            cprint('Tatsächliche Zeit für {} waren {}..'.format(text, strfdelta(dur)), COLOR_LOG)
+            cprint('Tatsächliche Zeit für {} waren {}..'.format(
+                text, strfdelta(dur)), COLOR_LOG)
 
         for i in range(start, len(self.tasks)):
             if i > 0:
@@ -159,18 +160,18 @@ class Microday(object):
         start = self.tasks[next_task]['start'] \
             if len(self.tasks) > (next_task)   \
             else self.tasks[self.cur]['start'] \
-                + self.tasks[self.cur]['duration']
+        + self.tasks[self.cur]['duration']
 
         self.tasks.insert(
-            next_task, 
+            next_task,
             self.create_task(
-                start, 
-                timedelta(minutes=duration), 
+                start,
+                timedelta(minutes=duration),
                 text
             )
         )
 
-    def return_to_todos(self, index):
+    def task_to_todo(self, index):
         self.todos.insert(0, self.tasks[index]['task'])
         del self.tasks[index]
         self.to_disk()
@@ -180,7 +181,8 @@ class Microday(object):
         sys.stdout.write("\r{}".format(" " * 80))
 
         cur_task = self.tasks[self.cur]
-        next_task = self.tasks[self.cur + 1] if len(self.tasks) > self.cur + 1 else None
+        next_task = self.tasks[self.cur +
+                               1] if len(self.tasks) > self.cur + 1 else None
 
         # Case: Current task hasn't started yet
         if cur_task['start'] > datetime.now():
@@ -245,7 +247,7 @@ class Microday(object):
                 elif choice == 't':
                     self.insert_new_task()
                 elif choice == 's':
-                    self.return_to_todos(self.cur)
+                    self.task_to_todo(self.cur)
 
                 print(self.serialize())
 
