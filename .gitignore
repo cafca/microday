@@ -1,5 +1,5 @@
 .DS_Store
-todo.md
+*.md
 venv
 __pycache__
 .vscode

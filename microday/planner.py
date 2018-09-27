@@ -1,4 +1,4 @@
-import pdb
+import argparse
 import re
 import sys
 import select
@@ -9,6 +9,7 @@ from termcolor import cprint, colored
 
 COLOR_LOG = 'grey'
 COLOR_ACCENT = 'green'
+VERSION = "0.1.0"
 
 
 def user_choice(text):
@@ -17,7 +18,6 @@ def user_choice(text):
         choice = input(colored('{} [Y/n] '.format(text), COLOR_ACCENT))
     print("")
     return choice in ['y', '']
-
 
 def strfdelta(tdelta, fmt='{m}:{s:02d}'):
     d = {"d": tdelta.days}
@@ -31,9 +31,13 @@ class Microday(object):
     tasks = []  # tasks are scheduled
 
     def __init__(self, datafn):
+        cprint('--- Microday {} ---\n'.format(VERSION), 'blue')
         self.instructions = "[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen"
         self.datafn = datafn
-        self.from_disk(datafn)
+        try:
+            self.from_disk(datafn)
+        except FileNotFoundError:
+            self.from_input()
 
     def announce(self, index, left):
         if left is None or left.seconds not in [0, 60]:
@@ -64,6 +68,18 @@ class Microday(object):
                     self.process_task(line)
                 else:
                     self.process_todo(line.strip())
+
+    def from_input(self):
+        txt = "Guten Morgen! Die <{}> ist noch leer.\nWas möchtest du heute tun? [leer=weiter]\n"
+        cprint(txt.format(self.datafn), COLOR_ACCENT)
+
+        while(True):
+            ans = input(colored('Aufgabe eingeben: ', COLOR_LOG))
+            if ans != '':
+                self.process_todo(ans)
+            else:
+                break
+        
 
     def create_task(self, start, duration, task):
         offset = start.minute % 5
@@ -218,7 +234,6 @@ class Microday(object):
             self.announce(self.cur + 1, left)
 
     def run(self):
-        cprint('--- Microday 1.0 ---\n', 'blue')
         # Constructor loads state from disk
         remaining = self.select_starting_point()
 
@@ -297,10 +312,26 @@ class Microday(object):
 
 
 if __name__ == '__main__':
-    planner = Microday('todo.md')
+    default_filename = 'todo_{}.md'.format(datetime.now().strftime("%y-%m-%d"))
+    parser = argparse.ArgumentParser(description='Plan your day meticulously')
+    parser.add_argument('filename', 
+        nargs='?',
+        type=str, 
+        default=default_filename,
+        help="Filename of your todo doc, default is 'todo_<y-m-d>.md'>"
+    )
+    args = parser.parse_args()
+    planner = Microday(args.filename)
     try:
         planner.run()
     except KeyboardInterrupt:
+        remaining = planner.select_starting_point()
+        if len(remaining) > 0:
+            put_back = user_choice('\n\n{} offene Tasks zurück zu den Todos legen?'.format(len(remaining)))
+            if put_back:
+                [planner.task_to_todo(i) for i in remaining[::-1]]
+        else:
+            print()
         planner.to_disk()
-        cprint('\nZeitplan gespeichert. Bye!\n', COLOR_ACCENT)
+        cprint('Zeitplan gespeichert. Bye!\n', COLOR_ACCENT)
         raise SystemExit
