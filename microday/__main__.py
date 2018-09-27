@@ -10,7 +10,7 @@ import subprocess
 from datetime import datetime, timedelta
 from time import sleep
 from termcolor import cprint, colored
-from __version__ import __version__ as VERSION
+from .__version__ import __version__ as VERSION
 
 COLOR_LOG = 'grey'
 COLOR_ACCENT = 'green'
@@ -47,6 +47,7 @@ class Microday(object):
             except FileNotFoundError:
                 cprint('{} not found'.format('todo.md'), COLOR_LOG)
                 self.from_input()
+                self.to_disk()
 
     def announce(self, index, left):
         if left is None or left.seconds not in [0, 60]:
@@ -321,7 +322,8 @@ class Microday(object):
         cprint('{} gespeichert.'.format(fullp), COLOR_LOG)
 
 
-if __name__ == '__main__':
+
+def main():
     default_filename = 'todo_{}.md'.format(datetime.now().strftime("%y-%m-%d"))
     parser = argparse.ArgumentParser(
         description='Meticulously plan your day minute-by-minute')
@@ -355,3 +357,6 @@ if __name__ == '__main__':
         md.to_disk()
         cprint('Bye!\n', COLOR_ACCENT)
         raise SystemExit
+
+if __name__ == '__main__':
+    main()
