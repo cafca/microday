@@ -7,15 +7,18 @@ from datetime import datetime, timedelta
 from time import sleep
 from termcolor import cprint, colored
 
+COLOR_LOG = 'grey'
+COLOR_ACCENT = 'green'
 
 def user_choice(text):
     choice = None
     while choice not in ['y', 'n', '']:
-        choice = input('{} [Y/n] '.format(text))
+        choice = input(colored('{} [Y/n] '.format(text), COLOR_ACCENT))
+    print("")
     return choice in ['y', '']
 
 
-def strfdelta(tdelta, fmt):
+def strfdelta(tdelta, fmt='{m}:{s:02d}'):
     d = {"d": tdelta.days}
     d["h"], rem = divmod(tdelta.seconds, 3600)
     d["m"], d["s"] = divmod(rem, 60)
@@ -23,11 +26,11 @@ def strfdelta(tdelta, fmt):
 
 
 class Microday(object):
+    todos = []  # todos are unsorted
+    tasks = []  # tasks are scheduled
+
     def __init__(self, datafn):
-        self.instructions = "\n[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen\n"
-        self.regex = None
-        self.tasks = []
-        self.todos = []
+        self.instructions = "[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen"
         self.datafn = datafn
         self.from_disk(datafn)
 
@@ -48,13 +51,12 @@ class Microday(object):
 
     def from_disk(self, datafn):
         with open(datafn) as f:
-
             planning = False
             for line in f.readlines():
-                if line == '\n' or line.strip() in [colored('# Todos', 'blue'), '# Todos']:
+                if line == '\n' or line.strip() == '# Todos':
                     continue
 
-                if line.startswith(colored('# Zeitplan', 'blue')) or line.startswith('# Zeitplan'):
+                if line.startswith('# Zeitplan'):
                     planning = True
 
                 if planning:
@@ -113,128 +115,183 @@ class Microday(object):
         if m:
             self.todos.append(m.group(1))
 
-    def reschedule(self, current):
-        if self.tasks[current]['start'] > datetime.now():
-            self.tasks[current]['start'] = datetime.now()
-            start = current
+    def reschedule(self):
+        cprint('Neuplanung..', COLOR_LOG)
+
+        if self.tasks[self.cur]['start'] - datetime.now() < timedelta(minutes=5):
+            cprint('Nimm dir eine kurze Pause und beginne dann mit {}'.format(
+                self.tasks[self.cur]['task']
+            ), COLOR_LOG)
+            return
+        
+        if self.tasks[self.cur]['start'] > datetime.now():
+            cprint('Aktuelle Aufgabe wird vorgezogen..', COLOR_LOG)
+            self.tasks[self.cur]['start'] = datetime.now()
+            start = self.cur
         else:
-            dur = datetime.now() - self.tasks[current]['start']
-            self.tasks[current]['duration'] = dur
-            start = current + 1
+            text = self.tasks[self.cur]['task']
+            dur = datetime.now() - self.tasks[self.cur]['start']
+            self.tasks[self.cur]['duration'] = dur
+            start = self.cur + 1
+            cprint('Tatsächliche Zeit für {} waren {}..'.format(text, strfdelta(dur)), COLOR_LOG)
 
         for i in range(start, len(self.tasks)):
-            prev = self.tasks[i - 1]
-            self.tasks[i] = self.create_task(
-                prev['start'] + prev['duration'],  # new start time
-                self.tasks[i]['duration'],
-                self.tasks[i]['task']
-            )
-        print("\n" + self.serialize() + "\n")
+            if i > 0:
+                prev = self.tasks[i - 1]
+                start = prev['start'] + prev['duration']
+            else:
+                start = datetime.now()
+            duration = self.tasks[i]['duration']
+            text = self.tasks[i]['task']
+            self.tasks[i] = self.create_task(start, duration, text)
+
         self.to_disk()
 
-    def run(self):
-        if len(self.todos) > 0:
-            print(self.serialize())
-            if user_choice(colored('Zeitplanung für offene Todos starten?', 'green')):
-                self.plan_todos()
-                print("\n")
+        if self.tasks[self.cur]['start'] <= datetime.now():
+            cprint('Nächste Aufgabe..', COLOR_LOG)
+            self.cur += 1
 
-        print(self.serialize())
-        print("\n")
+    def insert_new_task(self):
+        text = input(colored('Aufgabe eingeben: ', COLOR_ACCENT))
+        duration = int(input(colored('Wieviele Minuten?: ', COLOR_ACCENT)))
+
+        next_task = self.cur + 1
+        start = self.tasks[next_task]['start'] \
+            if len(self.tasks) > (next_task)   \
+            else self.tasks[self.cur]['start'] \
+                + self.tasks[self.cur]['duration']
+
+        self.tasks.insert(
+            next_task, 
+            self.create_task(
+                start, 
+                timedelta(minutes=duration), 
+                text
+            )
+        )
+
+    def return_to_todos(self, index):
+        self.todos.insert(0, self.tasks[index]['task'])
+        del self.tasks[index]
+        self.to_disk()
+
+    def print_announcement_line(self):
+        # Reset command prompt with
+        sys.stdout.write("\r{}".format(" " * 80))
+
+        cur_task = self.tasks[self.cur]
+        next_task = self.tasks[self.cur + 1] if len(self.tasks) > self.cur + 1 else None
+
+        # Case: Current task hasn't started yet
+        if cur_task['start'] > datetime.now():
+            left = cur_task['start'] - datetime.now()
+            announcement = "\r{taskname} beginnt in {timeleft}".format(
+                taskname=cur_task['task'],
+                timeleft=strfdelta(left, '{m}:{s:02d}'))
+            if left > timedelta(minutes=5):
+                announcement += " [enter=starte jetzt]"
+            sys.stdout.write(colored(announcement, COLOR_ACCENT))
+            self.announce(self.cur, left)
+
+        # Case: Current task has started in the past
+        else:
+            if (self.cur + 1) < len(self.tasks):
+                text = next_task['task']
+                left = next_task['start'] - datetime.now()
+            else:
+                text = "Fertig!"
+                left = None
+
+            running_clock = strfdelta(
+                datetime.now() - cur_task['start'],
+                '{m}:{s:02d}'
+            )
+
+            update_tmpl = "\r{} vergangen bei: {}, als nächstes: {}. "
+            sys.stdout.write(colored(update_tmpl.format(
+                running_clock,
+                cur_task['task'],
+                text
+            ), COLOR_ACCENT))
+            self.announce(self.cur + 1, left)
+
+    def run(self):
         remaining = [i for i, t in enumerate(self.tasks)
                      if t['start'] + t['duration'] >= datetime.now()]
+        self.cur = remaining[0] if len(remaining) > 0 else 0
+
+        cprint('--- Microday 1.0 ---\n', 'blue')
+
+        if len(self.todos) > 0:
+            print(self.serialize())
+            if user_choice('Zeitplanung für offene Todos starten?'):
+                self.plan_todos()
+
+        print(self.serialize())
+
+        remaining = [i for i, t in enumerate(self.tasks)
+                     if t['start'] + t['duration'] >= datetime.now()]
+        self.cur = remaining[0] if len(remaining) > 0 else 0
 
         if len(remaining) == 0:
-            cprint("Alle Aufgaben liegen in der Vergangenheit", 'green')
+            cprint("Alle Aufgaben liegen in der Vergangenheit", COLOR_ACCENT)
             return
 
-        cur = remaining[0]
+        print(self.instructions + '\n')
+
         while(True):
-            # If user entered something since last loop
-            if (select.select([sys.stdin, ], [], [], 0.0)[0]):
+            is_user_input_available = select.select(
+                [sys.stdin, ], [], [], 0.0)[0]
+
+            if is_user_input_available:
                 choice = sys.stdin.readline().strip()
+
                 if choice == '':
-                    cprint('Neuplanung..', 'grey')
-                    self.reschedule(cur)
-                    if self.tasks[cur]['start'] <= datetime.now():
-                        cprint('Nächste Aufgabe..', 'grey')
-                        cur += 1
-                        if cur >= len(self.tasks):
-                            cprint("Fertig!", 'green')
-                            break
+                    self.reschedule()
                 elif choice == 't':
-                    task = input(colored('Aufgabe eingeben: ', 'green'))
-                    duration = int(input(colored('Wieviele Minuten?: ', 'green')))
-                    start = self.tasks[cur + 1]['start'] if len(self.tasks) > (cur + 1) else self.tasks[cur]['start'] + self.tasks[cur]['duration']
-                    self.tasks.insert(
-                        cur + 1, self.create_task(start, timedelta(minutes=duration), task))
-                    print(self.serialize())
+                    self.insert_new_task()
                 elif choice == 's':
-                    self.todos.insert(0, self.tasks[cur]['task'])
-                    del self.tasks[cur]
-                    self.to_disk()
-                    print(self.serialize())
-                    if cur == len(self.tasks):
-                        cprint("Fertig!", 'green')
-                        break
+                    self.return_to_todos(self.cur)
 
-                print(self.instructions)
+                print(self.serialize())
 
-            sys.stdout.write("\r{}".format(" " * 80))
+                if self.cur == len(self.tasks):
+                    cprint("Fertig!", COLOR_ACCENT)
+                    break
 
-            if self.tasks[cur]['start'] > datetime.now():
-                left = self.tasks[cur]['start'] - datetime.now()
-                sys.stdout.write(colored("\r{} beginnt in {} [enter=starte jetzt]".format(
-                    self.tasks[cur]['task'],
-                    strfdelta(left, '{m}:{s:02d}')
-                ), 'green'))
-                self.announce(cur, left)
-            else:
-                if (cur + 1) < len(self.tasks):
-                    next_task = self.tasks[cur + 1]['task']
-                    left = self.tasks[cur + 1]['start'] - datetime.now()
-                else:
-                    next_task = "Fertig!"
-                    left = None
-                over = strfdelta(
-                    datetime.now() - self.tasks[cur]['start'],
-                    '{m}:{s:02d}'
-                )
+                print(self.instructions + "\n")
 
-                update_tmpl = "\r{} vergangen bei: {}, als nächstes: {}. "
-                sys.stdout.write(colored(update_tmpl.format(
-                    over,
-                    self.tasks[cur]['task'],
-                    next_task
-                ), 'green'))
-                self.announce(cur + 1, left)
-
+            self.print_announcement_line()
             sleep(1)
 
-    def serialize(self):
+    def serialize(self, colors=True):
+        def maybe_colored(text, color):
+            return colored(text, color) if colors else text
+
         out = ""
         if len(self.todos) > 0:
-            out += colored("# Todos", 'blue')
+            out += maybe_colored("# Todos", 'blue')
             out += "\n\n- "
             out += '\n- '.join(self.todos)
-            out += "\n\n"
+            out += "\n"
 
         if len(self.tasks) > 0:
-            out += colored("# Zeitplan", 'blue')
+            out += "\n"
+            out += maybe_colored("# Zeitplan", 'blue')
             out += "\n\n"
-            out += "\n".join(["{} - {}h {}".format(
+            out += "\n".join([maybe_colored("{} - {}h {}".format(
                 task['start'].strftime("%H:%M"),
                 strfdelta(task['duration'], "{h}:{m:02d}"),
                 task['task']
-            ) for task in self.tasks])
+            ), 'red' if i == self.cur else 'white') for i, task in enumerate(self.tasks)])
             end = self.tasks[-1]['start'] + self.tasks[-1]['duration']
-            out += "\n{} - Feierabend".format(end.strftime("%H:%M"))
+            out += "\n{} - Feierabend\n".format(end.strftime("%H:%M"))
 
         return out
 
     def to_disk(self):
         with open(self.datafn, 'w') as f:
-            f.write(self.serialize())
+            f.write(self.serialize(colors=False))
 
 
 if __name__ == '__main__':
@@ -243,5 +300,5 @@ if __name__ == '__main__':
         planner.run()
     except KeyboardInterrupt:
         planner.to_disk()
-        cprint('\nZeitplan gespeichert. Bye!\n', 'green')
+        cprint('\nZeitplan gespeichert. Bye!\n', COLOR_ACCENT)
         raise SystemExit
