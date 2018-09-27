@@ -144,16 +144,16 @@ class Microday(object):
     def reschedule(self):
         cprint('Neuplanung..', COLOR_LOG)
 
-        if self.tasks[self.cur]['start'] - datetime.now() < timedelta(minutes=5):
-            cprint('Nimm dir eine kurze Pause und beginne dann mit {}'.format(
-                self.tasks[self.cur]['task']
-            ), COLOR_LOG)
-            return
-
         if self.tasks[self.cur]['start'] > datetime.now():
-            cprint('Aktuelle Aufgabe wird vorgezogen..', COLOR_LOG)
-            self.tasks[self.cur]['start'] = datetime.now()
-            start = self.cur
+            if self.tasks[self.cur]['start'] - datetime.now() < timedelta(minutes=5):
+                cprint('Nimm dir eine kurze Pause und beginne dann mit {}'.format(
+                    self.tasks[self.cur]['task']
+                ), COLOR_LOG)
+                return
+            else:
+                cprint('Aktuelle Aufgabe wird vorgezogen..', COLOR_LOG)
+                self.tasks[self.cur]['start'] = datetime.now()
+                start = self.cur
         else:
             text = self.tasks[self.cur]['task']
             dur = datetime.now() - self.tasks[self.cur]['start']
