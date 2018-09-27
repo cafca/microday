@@ -216,11 +216,9 @@ class Microday(object):
             self.announce(self.cur + 1, left)
 
     def run(self):
-        remaining = [i for i, t in enumerate(self.tasks)
-                     if t['start'] + t['duration'] >= datetime.now()]
-        self.cur = remaining[0] if len(remaining) > 0 else 0
-
         cprint('--- Microday 1.0 ---\n', 'blue')
+        # Constructor loads state from disk
+        remaining = self.select_starting_point()
 
         if len(self.todos) > 0:
             print(self.serialize())
@@ -228,10 +226,7 @@ class Microday(object):
                 self.plan_todos()
 
         print(self.serialize())
-
-        remaining = [i for i, t in enumerate(self.tasks)
-                     if t['start'] + t['duration'] >= datetime.now()]
-        self.cur = remaining[0] if len(remaining) > 0 else 0
+        remaining = self.select_starting_point()
 
         if len(remaining) == 0:
             cprint("Alle Aufgaben liegen in der Vergangenheit", COLOR_ACCENT)
@@ -245,7 +240,6 @@ class Microday(object):
 
             if is_user_input_available:
                 choice = sys.stdin.readline().strip()
-
                 if choice == '':
                     self.reschedule()
                 elif choice == 't':
@@ -263,6 +257,12 @@ class Microday(object):
 
             self.print_announcement_line()
             sleep(1)
+
+    def select_starting_point(self):
+        remaining = [i for i, t in enumerate(self.tasks)
+                     if t['start'] + t['duration'] >= datetime.now()]
+        self.cur = remaining[0] if len(remaining) > 0 else 0
+        return remaining
 
     def serialize(self, colors=True):
         def maybe_colored(text, color):
