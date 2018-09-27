@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import argparse
 import re
 import os
@@ -7,10 +10,10 @@ import subprocess
 from datetime import datetime, timedelta
 from time import sleep
 from termcolor import cprint, colored
+from __version__ import __version__ as VERSION
 
 COLOR_LOG = 'grey'
 COLOR_ACCENT = 'green'
-VERSION = "0.1.0"
 
 
 def user_choice(text):
@@ -32,7 +35,7 @@ class Microday(object):
     tasks = []  # tasks are scheduled
 
     def __init__(self, datafn):
-        cprint('--- Microday {} ---\n'.format(VERSION), 'blue')
+        cprint('--- microday {} ---\n'.format(VERSION), 'blue')
         self.instructions = "[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen"
         self.datafn = datafn
         try:
@@ -320,7 +323,8 @@ class Microday(object):
 
 if __name__ == '__main__':
     default_filename = 'todo_{}.md'.format(datetime.now().strftime("%y-%m-%d"))
-    parser = argparse.ArgumentParser(description='Plan your day meticulously')
+    parser = argparse.ArgumentParser(
+        description='Meticulously plan your day minute-by-minute')
     parser.add_argument('filename', 
         nargs='?',
         type=str, 
@@ -329,21 +333,25 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    planner = Microday(args.filename)
+    try:
+        md = Microday(args.filename)
+    except KeyboardInterrupt:
+        cprint('\n\nNagut, dann halt nicht.', COLOR_ACCENT)
+        sys.exit()
 
     try:
-        planner.run()
+        md.run()
     except KeyboardInterrupt:
-        remaining = planner.select_starting_point()
+        remaining = md.select_starting_point()
         if len(remaining) > 0:
             put_back = user_choice(
                 '\n\n{} offene Tasks zurück zu den Todos legen?'.format(
                     len(remaining)))
             if put_back:
-                [planner.task_to_todo(i) for i in remaining[::-1]]
+                [md.task_to_todo(i) for i in remaining[::-1]]
         else:
             print()
 
-        planner.to_disk()
+        md.to_disk()
         cprint('Bye!\n', COLOR_ACCENT)
         raise SystemExit
