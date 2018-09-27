@@ -1,3 +1,3 @@
-from .microday import *
+from .__main__ import *
 
 name = 'microday'
