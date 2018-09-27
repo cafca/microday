@@ -44,16 +44,16 @@ class Microday(object):
 
     def __init__(self, datafn):
         cprint('--- microday {} ---\n'.format(VERSION), COLOR_INFO)
-        self.instructions = "[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen"
+        self.instructions = "[enter] Vorwärts \n[t] Task einfügen \n[s] Diesen überspringen"
         self.datafn = datafn
         try:
             self.from_disk(datafn)
         except FileNotFoundError:
-            cprint("{} not found. Trying 'todo.md'..".format(datafn), COLOR_LOG)
+            cprint("{} nicht gefunden. Probiere 'todo.md'..".format(datafn), COLOR_LOG)
             try:
                 self.from_disk('todo.md')
             except FileNotFoundError:
-                cprint('{} not found'.format('todo.md'), COLOR_LOG)
+                cprint('{} auch nicht gefunden'.format('todo.md'), COLOR_LOG)
                 self.from_input()
                 self.to_disk()
 
