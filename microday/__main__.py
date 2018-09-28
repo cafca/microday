@@ -2,24 +2,32 @@
 # -*- coding: utf-8 -*-
 
 import argparse
-import re
 import os
-import sys
+import re
 import select
 import subprocess
+import sys
 from datetime import datetime, timedelta
 from time import sleep
-from termcolor import cprint, colored
+
+import colored
+from colored import stylize
+
 from .__version__ import __version__ as VERSION
 
-COLOR_LOG = 'grey'
-COLOR_ACCENT = 'green'
+COLOR_LOG = colored.fg('dark_gray')
+COLOR_ACCENT = colored.fg('green')
+COLOR_INFO = colored.fg('blue')
+COLOR_CURRENT_TASK = colored.fg('red')
+COLOR_DEFAULT = colored.fg('white')
 
+def cprint(txt, color):
+    print(stylize(txt, color))
 
 def user_choice(text):
     choice = None
     while choice not in ['y', 'n', '']:
-        choice = input(colored('{} [Y/n] '.format(text), COLOR_ACCENT))
+        choice = input(stylize('{} [Y/n] '.format(text), COLOR_ACCENT))
     print("")
     return choice in ['y', '']
 
@@ -35,17 +43,17 @@ class Microday(object):
     tasks = []  # tasks are scheduled
 
     def __init__(self, datafn):
-        cprint('--- microday {} ---\n'.format(VERSION), 'blue')
-        self.instructions = "[enter] für nächsten Task\n[t] für neuen task\n[s] für diesen skippen"
+        cprint('--- microday {} ---\n'.format(VERSION), COLOR_INFO)
+        self.instructions = "[enter] Vorwärts \n[t] Task einfügen \n[s] Diesen überspringen"
         self.datafn = datafn
         try:
             self.from_disk(datafn)
         except FileNotFoundError:
-            cprint("{} not found. Trying 'todo.md'..".format(datafn), COLOR_LOG)
+            cprint("{} nicht gefunden. Probiere 'todo.md'..".format(datafn), COLOR_LOG)
             try:
                 self.from_disk('todo.md')
             except FileNotFoundError:
-                cprint('{} not found'.format('todo.md'), COLOR_LOG)
+                cprint('{} auch nicht gefunden'.format('todo.md'), COLOR_LOG)
                 self.from_input()
                 self.to_disk()
 
@@ -84,7 +92,7 @@ class Microday(object):
         cprint(txt.format(self.datafn), COLOR_ACCENT)
 
         while(True):
-            ans = input(colored('Aufgabe eingeben: ', COLOR_LOG))
+            ans = input(stylize('Aufgabe eingeben: ', COLOR_LOG))
             if ans != '':
                 self.process_todo(ans)
             else:
@@ -176,24 +184,28 @@ class Microday(object):
             cprint('Nächste Aufgabe..', COLOR_LOG)
             self.cur += 1
 
-    def insert_new_task(self):
-        text = input(colored('Aufgabe eingeben: ', COLOR_ACCENT))
-        duration = int(input(colored('Wieviele Minuten?: ', COLOR_ACCENT)))
+    def insert_new(self):
+        text = input(stylize('Aufgabe eingeben: ', COLOR_ACCENT))
+        duration = input(stylize('Wieviele Minuten? [leer=todo-liste]: ', COLOR_ACCENT))
 
-        next_task = self.cur + 1
-        start = self.tasks[next_task]['start'] \
-            if len(self.tasks) > (next_task)   \
-            else self.tasks[self.cur]['start'] \
-        + self.tasks[self.cur]['duration']
+        if len(duration) > 0:
+            duration = int(duration)
+            next_task = self.cur + 1
+            start = self.tasks[next_task]['start'] \
+                if len(self.tasks) > (next_task)   \
+                else self.tasks[self.cur]['start'] \
+            + self.tasks[self.cur]['duration']
 
-        self.tasks.insert(
-            next_task,
-            self.create_task(
-                start,
-                timedelta(minutes=duration),
-                text
+            self.tasks.insert(
+                next_task,
+                self.create_task(
+                    start,
+                    timedelta(minutes=duration),
+                    text
+                )
             )
-        )
+        else:
+            self.todos.append(text)
 
     def task_to_todo(self, index):
         self.todos.insert(0, self.tasks[index]['task'])
@@ -215,7 +227,7 @@ class Microday(object):
                 timeleft=strfdelta(left, '{m}:{s:02d}'))
             if left > timedelta(minutes=5):
                 announcement += " [enter=starte jetzt]"
-            sys.stdout.write(colored(announcement, COLOR_ACCENT))
+            sys.stdout.write(stylize(announcement, COLOR_ACCENT))
             self.announce(self.cur, left)
 
         # Case: Current task has started in the past
@@ -233,7 +245,7 @@ class Microday(object):
             )
 
             update_tmpl = "\r{} vergangen bei: {}, als nächstes: {}. "
-            sys.stdout.write(colored(update_tmpl.format(
+            sys.stdout.write(stylize(update_tmpl.format(
                 running_clock,
                 cur_task['task'],
                 text
@@ -267,7 +279,7 @@ class Microday(object):
                 if choice == '':
                     self.reschedule()
                 elif choice == 't':
-                    self.insert_new_task()
+                    self.insert_new()
                 elif choice == 's':
                     self.task_to_todo(self.cur)
                 
@@ -291,25 +303,25 @@ class Microday(object):
         return remaining
 
     def serialize(self, colors=True):
-        def maybe_colored(text, color):
-            return colored(text, color) if colors else text
+        def maybe_stylize(text, color):
+            return stylize(text, color) if colors else text
 
         out = ""
         if len(self.todos) > 0:
-            out += maybe_colored("# Todos", 'blue')
+            out += maybe_stylize("# Todos", COLOR_INFO)
             out += "\n\n- "
             out += '\n- '.join(self.todos)
             out += "\n"
 
         if len(self.tasks) > 0:
             out += "\n"
-            out += maybe_colored("# Zeitplan", 'blue')
+            out += maybe_stylize("# Zeitplan", COLOR_INFO)
             out += "\n\n"
-            out += "\n".join([maybe_colored("{} - {}h {}".format(
+            out += "\n".join([maybe_stylize("{} - {}h {}".format(
                 task['start'].strftime("%H:%M"),
                 strfdelta(task['duration'], "{h}:{m:02d}"),
                 task['task']
-            ), 'red' if i == self.cur else 'white') for i, task in enumerate(self.tasks)])
+            ), COLOR_CURRENT_TASK if i == self.cur else COLOR_DEFAULT) for i, task in enumerate(self.tasks)])
             end = self.tasks[-1]['start'] + self.tasks[-1]['duration']
             out += "\n{} - Feierabend\n".format(end.strftime("%H:%M"))
 
@@ -324,6 +336,10 @@ class Microday(object):
 
 
 def main():
+    if sys.version_info < (3, 6):
+        print("Sorry, microday requires at least Python 3.6")
+        sys.exit()
+        
     default_filename = 'todo_{}.md'.format(datetime.now().strftime("%y-%m-%d"))
     parser = argparse.ArgumentParser(
         description='Meticulously plan your day minute-by-minute')
