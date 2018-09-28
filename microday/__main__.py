@@ -184,24 +184,28 @@ class Microday(object):
             cprint('Nächste Aufgabe..', COLOR_LOG)
             self.cur += 1
 
-    def insert_new_task(self):
+    def insert_new(self):
         text = input(stylize('Aufgabe eingeben: ', COLOR_ACCENT))
-        duration = int(input(stylize('Wieviele Minuten?: ', COLOR_ACCENT)))
+        duration = input(stylize('Wieviele Minuten? [leer=todo-liste]: ', COLOR_ACCENT))
 
-        next_task = self.cur + 1
-        start = self.tasks[next_task]['start'] \
-            if len(self.tasks) > (next_task)   \
-            else self.tasks[self.cur]['start'] \
-        + self.tasks[self.cur]['duration']
+        if len(duration) > 0:
+            duration = int(duration)
+            next_task = self.cur + 1
+            start = self.tasks[next_task]['start'] \
+                if len(self.tasks) > (next_task)   \
+                else self.tasks[self.cur]['start'] \
+            + self.tasks[self.cur]['duration']
 
-        self.tasks.insert(
-            next_task,
-            self.create_task(
-                start,
-                timedelta(minutes=duration),
-                text
+            self.tasks.insert(
+                next_task,
+                self.create_task(
+                    start,
+                    timedelta(minutes=duration),
+                    text
+                )
             )
-        )
+        else:
+            self.todos.append(text)
 
     def task_to_todo(self, index):
         self.todos.insert(0, self.tasks[index]['task'])
@@ -275,7 +279,7 @@ class Microday(object):
                 if choice == '':
                     self.reschedule()
                 elif choice == 't':
-                    self.insert_new_task()
+                    self.insert_new()
                 elif choice == 's':
                     self.task_to_todo(self.cur)
                 
